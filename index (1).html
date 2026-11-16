@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#155e75">
+  <title>Employee Attendance</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, "Noto Sans Bengali", sans-serif; color:#17212b; background:#f3f6f8; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:22px 14px; }
+    .wrap { width:min(100%,520px); margin:0 auto; }
+    .card { background:#fff; border:1px solid #e4eaee; border-radius:18px; padding:22px; box-shadow:0 8px 28px #16324a0d; }
+    header { text-align:center; margin-bottom:20px; }
+    h1 { margin:0; font-size:23px; letter-spacing:.3px; color:#155e75; }
+    .sub { margin:6px 0 0; color:#64748b; font-size:13px; }
+    label { display:block; font-weight:650; font-size:14px; margin:15px 0 7px; }
+    input, select { width:100%; min-height:48px; border:1px solid #cbd5df; border-radius:10px; padding:11px 12px; font:inherit; font-size:16px; background:#fff; color:#17212b; }
+    input[readonly] { background:#f1f5f7; color:#475569; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    button { width:100%; min-height:50px; border:0; border-radius:11px; background:#0e7490; color:white; font:inherit; font-weight:750; font-size:16px; margin-top:22px; cursor:pointer; }
+    button:disabled { opacity:.6; cursor:wait; }
+    .hint { color:#64748b; font-size:12px; margin-top:6px; }
+    #status { display:none; margin-top:15px; padding:12px; border-radius:10px; font-size:14px; line-height:1.5; }
+    #status.ok { display:block; background:#ecfdf5; color:#065f46; }
+    #status.err { display:block; background:#fef2f2; color:#991b1b; }
+    .footer { text-align:center; color:#94a3b8; font-size:11px; margin-top:15px; }
+    @media (max-width:380px) { .card { padding:17px; } h1 { font-size:20px; } .grid { gap:8px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <header>
+        <h1>EMPLOYEE ATTENDANCE</h1>
+        <p class="sub">দৈনিক হাজিরা ফরম</p>
+      </header>
+
+      <form id="attendanceForm">
+        <label for="date">তারিখ</label>
+        <input id="date" name="date" type="date" required>
+
+        <label for="employee">কর্মচারীর নাম</label>
+        <select id="employee" required>
+          <option value="">নাম নির্বাচন করুন</option>
+        </select>
+
+        <div class="grid">
+          <div>
+            <label for="empId">Employee ID</label>
+            <input id="empId" readonly placeholder="Auto">
+          </div>
+          <div>
+            <label for="designation">Designation</label>
+            <input id="designation" readonly placeholder="Auto">
+          </div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <label for="inTime">IN TIME (সকাল)</label>
+            <input id="inTime" name="inTime" type="time">
+          </div>
+          <div>
+            <label for="outTime">OUT TIME (বিকেল)</label>
+            <input id="outTime" name="outTime" type="time">
+          </div>
+        </div>
+        <p class="hint">সকালে শুধু IN TIME অথবা বিকেলে শুধু OUT TIME দিয়েও জমা দিতে পারবেন।</p>
+
+        <button id="submitBtn" type="submit">SUBMIT ATTENDANCE</button>
+        <div id="status" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+    <p class="footer"> Developed By: MD. ZAHIDUL ISLAM, E-mail: userzahidul@gmail.com, Contact No: +88 01902 337529</p>
+  </main>
+
+  <iframe name="submitFrame" id="submitFrame" title="submission" style="display:none"></iframe>
+  <script>
+    // আপনার Google Apps Script Web App URL
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7Mi3YT3csVLqTbmLvAnXSYjPDZFrVq27Wk0pKAtjGYofzQNfx_Mlmw4otAP-JHung/exec";
+
+    const employeeSelect = document.getElementById("employee");
+    const form = document.getElementById("attendanceForm");
+    const submitBtn = document.getElementById("submitBtn");
+    const statusBox = document.getElementById("status");
+    const empId = document.getElementById("empId");
+    const designation = document.getElementById("designation");
+    const token = "attendance_" + Math.random().toString(36).slice(2);
+    let employees = [];
+
+    // তারিখের ইনপুটে ডিভাইসের স্থানীয় তারিখ বসায়
+    const now = new Date();
+    const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    document.getElementById("date").value = localDate.toISOString().slice(0,10);
+
+    function showStatus(message, type) {
+      statusBox.textContent = message;
+      statusBox.className = type;
+    }
+
+    function loadEmployees() {
+      if (
+        !SCRIPT_URL ||
+        !SCRIPT_URL.startsWith("https://script.google.com/macros/s/") ||
+        !SCRIPT_URL.endsWith("/exec")
+      ) {
+        showStatus("সঠিক Google Apps Script Web App URL বসান।", "err");
+        return;
+      }
+      const callback = "employeeCallback";
+      window[callback] = function(data) {
+        employees = Array.isArray(data) ? data : [];
+        employeeSelect.innerHTML = '<option value="">নাম নির্বাচন করুন</option>';
+        employees.forEach((person, index) => {
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = person.name;
+          employeeSelect.appendChild(option);
+        });
+        if (!employees.length) showStatus("কর্মচারীর তালিকা পাওয়া যায়নি। Employees শিটে তথ্য যোগ করুন।", "err");
+        delete window[callback];
+      };
+      const script = document.createElement("script");
+      script.src = SCRIPT_URL + "?action=employees&callback=" + callback + "&t=" + Date.now();
+      script.onerror = () => showStatus("কর্মচারীর তালিকা লোড হয়নি। Web App URL ও deployment access পরীক্ষা করুন।", "err");
+      document.body.appendChild(script);
+    }
+
+    employeeSelect.addEventListener("change", () => {
+      const person = employees[Number(employeeSelect.value)];
+      empId.value = person ? person.id : "";
+      designation.value = person ? person.designation : "";
+    });
+
+    window.addEventListener("message", (event) => {
+      if (!event.data || event.data.token !== token) return;
+      submitBtn.disabled = false;
+      submitBtn.textContent = "SUBMIT ATTENDANCE";
+      if (event.data.ok) {
+        showStatus(event.data.message || "হাজিরা সফলভাবে জমা হয়েছে।", "ok");
+        document.getElementById("inTime").value = "";
+        document.getElementById("outTime").value = "";
+      } else {
+        showStatus(event.data.message || "জমা দেওয়া যায়নি। আবার চেষ্টা করুন।", "err");
+      }
+    });
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const person = employees[Number(employeeSelect.value)];
+      const inTime = document.getElementById("inTime").value;
+      const outTime = document.getElementById("outTime").value;
+      if (!person) return showStatus("অনুগ্রহ করে কর্মচারীর নাম নির্বাচন করুন।", "err");
+      if (!inTime && !outTime) return showStatus("IN TIME অথবা OUT TIME—অন্তত একটি দিন।", "err");
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "জমা হচ্ছে...";
+      showStatus("আপনার হাজিরা জমা হচ্ছে...", "ok");
+
+      const postForm = document.createElement("form");
+      postForm.method = "POST";
+      postForm.action = SCRIPT_URL;
+      postForm.target = "submitFrame";
+      const fields = {
+        token, date: document.getElementById("date").value,
+        id: person.id, name: person.name, designation: person.designation,
+        inTime, outTime
+      };
+      Object.entries(fields).forEach(([key, value]) => {
+        const input = document.createElement("input");
+        input.type = "hidden"; input.name = key; input.value = value;
+        postForm.appendChild(input);
+      });
+      document.body.appendChild(postForm);
+      postForm.submit();
+      postForm.remove();
+      // ব্যর্থ হলে বাটন যেন আটকে না থাকে
+      setTimeout(() => {
+        if (submitBtn.disabled) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "SUBMIT ATTENDANCE";
+          showStatus("কোনো নিশ্চিতকরণ পাওয়া যায়নি। Google Sheet পরীক্ষা করে প্রয়োজন হলে আবার চেষ্টা করুন।", "err");
+        }
+      }, 15000);
+    });
+
+    loadEmployees();
+  </script>
+</body>
+</html>
